@@ -57,11 +57,13 @@ This module leverages **Ollama** to dynamically create **D&D 5e items** within F
 
 1. **Install the Module**
    - **Method 1:** Install directly from Foundry VTT's Module Management using the manifest URL:
-     ```
-     https://raw.githubusercontent.com/ArcadiaFrame/Llama-Item-Gen-for-Foundry-VTT/main/module.json
-     ```
+```text
+https://raw.githubusercontent.com/ArcadiaFrame/Llama-Item-Gen-for-Foundry-VTT/main/module.json
+```
      Make sure you're using the latest version of Foundry VTT to avoid installation issues.
-   - **Method 2:** Download the latest release from the [GitHub Releases page](https://github.com/ArcadiaFrame/Llama-Item-Gen-for-Foundry-VTT/releases) and install manually.
+
+
+   
 
 2. **Enable** the module in your world via `Game Settings > Manage Modules`.
 3. **Configure** the module in `Game Settings > Configure Settings > Llama Item Generator`:

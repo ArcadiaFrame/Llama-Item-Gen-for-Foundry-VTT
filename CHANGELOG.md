@@ -1,6 +1,21 @@
 # Changelog
+
+## v1.1.0 - Ollama Integration & Major Updates
+- ✅ **Ollama Integration:**  
+  Completely transitioned from OpenAI/ChatGPT to Ollama for local LLM support.
+- ✅ **Model Selection:**  
+  Added support for multiple Ollama models (llama3, llama2, mistral, wizard).
+- ✅ **Connection Testing:**  
+  Added functionality to test Ollama connection and fetch available models.
+- ✅ **Stable Diffusion Integration:**  
+  Added support for Stable Diffusion Automatic1111 for image generation.
+- ✅ **Image Generation Toggle:**  
+  Added option to enable/disable AI image generation.
+- ✅ **Repository Rename:**  
+  Renamed from "ChatGPT Item Generator" to "Llama Item Generator" to reflect the new LLM backend.
+
 ## v1.0.5 - Latest Improvements & Fixes
-  ✅ **API Key Change--
+  ✅ **API Key Change--**  
   When the OpenAI API key is changed it now refreshes the session to apply the API token to the script. 
 ## v1.0.4 - Latest Improvements & Fixes
 - ✅ **Nested Type Handling:--

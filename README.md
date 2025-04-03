@@ -1,25 +1,26 @@
-# ChatGPT Item Generator for Foundry VTT
+# Llama Item Generator for Foundry VTT
 
 ![image](https://github.com/user-attachments/assets/6b890c07-544d-42b1-829a-4f93b0a73827)
 
 ## Overview
-This module leverages **ChatGPT** and **DALL·E 3** to dynamically create **D&D 5e items** within Foundry VTT. Simply provide an item type (such as weapon, armor, or potion) along with a brief description, and the module will:
+This module leverages **Ollama** to dynamically create **D&D 5e items** within Foundry VTT. Simply provide an item type (such as weapon, armor, or potion) along with a brief description, and the module will:
 
-- **Generate a concise, thematic item name and description** using ChatGPT.
+- **Generate a concise, thematic item name and description** using Ollama's LLM capabilities.
 - **Produce a comprehensive description** complete with structured D&D 5e stats, including rarity, magical properties, weapon details, armor specifications, and damage calculations.
 - **Create and locally store an AI-generated image** using Base64 encoding, ensuring the image remains available even after module updates.
 - **Build roll tables** with customized entries that incorporate additional context (like city, biome, or theme details) while simultaneously generating linked items.
 
 ## Features
 
-### AI Integration with ChatGPT and DALL·E
-- **API Key Setup:** Obtain your API keys at [OpenAI API Keys](https://platform.openai.com/api-keys).
-- **Structured JSON Generation:** Uses ChatGPT (via GPT-4) to produce structured JSON for both D&D 5e items and roll tables.
-- **On-Demand Image Generation:** Utilizes DALL·E for creating item images on the fly, saving them locally.
-- **Subscription Requirement:** ChatGPT-Plus is recommended for accessing DALL·E 3 image generation.
+### AI Integration with Ollama
+- **API Configuration:** Set your Ollama API URL (default: http://localhost:11434) and optional API key in module settings.
+- **Structured JSON Generation:** Uses Ollama (with llama3 model) to produce structured JSON for both D&D 5e items and roll tables.
+- **On-Demand Image Generation:** Uses Stable Diffusion Automatic1111 for creating item images on the fly, saving them locally.
+- **Image Generation Toggle:** Option to enable or disable image generation in module settings.
+- **API Configuration:** Set your Stable Diffusion Automatic1111 endpoint URL in module settings.
 
 ### Robust JSON Handling
-- **Error Correction:** Employs multiple strategies to sanitize and fix invalid JSON, even utilizing the OpenAI API for corrections when needed.
+- **Error Correction:** Employs multiple strategies to sanitize and fix invalid JSON, even utilizing the Ollama API for corrections when needed.
 - **Compliance:** Ensures that the generated JSON adheres to Foundry’s expected structure for items and roll tables.
 
 ### Item Generation Capabilities
@@ -54,11 +55,16 @@ This module leverages **ChatGPT** and **DALL·E 3** to dynamically create **D&D 
 
 ## Setup & Usage
 
-1. **Install from Foundry Module managment**  
+1. **Install from Foundry VTT Module Management**  
 2. **Enable** the module in your world via `Game Settings > Manage Modules`.
-3. **Configure** your OpenAI API keys in `Game Settings > Configure Settings > ChatGPT Item Generator`.
-4. **Access** the Items tab (in Foundry v12, the button is integrated using the `renderItemDirectory` hook).
-6. **Click** the **Generate AI (Item or RollTable)** button to open the dialog, then choose whether to generate an item or a roll table.
+3. **Configure** the module in `Game Settings > Configure Settings > Llama Item Generator`:
+   - Set your Ollama API URL (default: http://localhost:11434)
+   - Set your Stable Diffusion API URL (if you want image generation)
+   - Enable/disable image generation
+   - Select your preferred Ollama model (llama3, llama2, mistral, or wizard)
+   - Test your Ollama connection using the "Test Connection" button
+4. **Access** the Items tab (in Foundry v12, the button is integrated in the Items directory footer).
+5. **Click** the **Generate AI (Item or RollTable)** button to open the dialog, then choose whether to generate an item or a roll table.
 6. For roll tables:
    - Select "Items" mode to automatically create and link generated item documents.
    - Select "Generic" mode to produce a custom table with 20 descriptive entries.
@@ -66,11 +72,17 @@ This module leverages **ChatGPT** and **DALL·E 3** to dynamically create **D&D 
 
 ## Troubleshooting & FAQ
 - **Common Issues:**
-  - **API Key Errors:** Verify that your API keys are correctly entered in the module settings.
+  - **Ollama Connection Errors:** Ensure Ollama is running locally (or on your server) and the API URL is correctly configured. Use the "Test Connection" button in settings to verify.
+  - **Model Availability:** Make sure the selected model (llama3, llama2, mistral, or wizard) is installed in your Ollama instance.
+  - **Stable Diffusion Errors:** Verify that your Stable Diffusion API endpoint URL is correctly entered and the service is running if image generation is enabled.
   - **Image Saving Failures:** Ensure the module folder (`data/chatgpt-item-generator/`) has the necessary write permissions.
-  - **JSON Formatting Problems:** If the output JSON is invalid, try re-running the prompt or check the OpenAI API response.
+  - **JSON Formatting Problems:** If the output JSON is invalid, try re-running the prompt or selecting a different Ollama model.
 - **General FAQs:**  
-  Refer to the [GitHub Issues](https://github.com/f3rr311/ChatGPT-Item-Gen-for-Foundry-VTT/issues) page for community-driven solutions and additional support.
+  - **How do I install Ollama?** Visit [Ollama's official website](https://ollama.ai/) for installation instructions for your operating system.
+  - **Which model should I use?** Llama 3 is recommended for best results, but you can experiment with other models.
+  - **Do I need Stable Diffusion?** No, image generation is optional. You can disable it in the module settings.
+  
+  For more help, refer to the [GitHub Issues](https://github.com/f3rr311/Llama-Item-Gen-for-Foundry-VTT/issues) page for community-driven solutions and additional support.
 
 ## Example Prompts
 - **Item Prompt:**  
@@ -100,7 +112,7 @@ This module leverages **ChatGPT** and **DALL·E 3** to dynamically create **D&D 
 
 
 ## Support
-For issues or feature requests, please visit [GitHub Issues](https://github.com/f3rr311/ChatGPT-Item-Gen-for-Foundry-VTT/issues).
+For issues or feature requests, please visit [GitHub Issues](https://github.com/f3rr311/Llama-Item-Gen-for-Foundry-VTT/issues).
 
 ## License
 This project is licensed under the [MIT License](https://opensource.org/licenses/MIT).

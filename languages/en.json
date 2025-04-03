@@ -1,10 +1,13 @@
 
 {
-    "MODULE_NAME": "ChatGPT Item Generator",
-    "MODULE_DESCRIPTION": "Generates AI-powered D&D 5e items with descriptions, effects, and images.",
+    "MODULE_NAME": "Llama Item Generator",
+    "MODULE_DESCRIPTION": "Generates AI-powered D&D 5e items with descriptions, effects, and images using Ollama.",
     "GENERATE_ITEM": "Generate AI D&D 5e Item",
-    "OPENAI_API_KEY": "OpenAI API Key",
-    "DALL_E_API_KEY": "DALL·E API Key",
-    "ERROR_MISSING_API_KEY": "OpenAI API Key is not set in the settings.",
-    "ITEM_CREATED": "New D&D 5e item created: {itemName}"
+    "ERROR_MISSING_API_URL": "Ollama API URL is not set in the settings.",
+    "ITEM_CREATED": "New D&D 5e item created: {itemName}",
+    "OLLAMA_CONNECTION_SUCCESS": "Successfully connected to Ollama server. Found {modelCount} models.",
+    "OLLAMA_CONNECTION_FAILED": "Failed to connect to Ollama server. Check your API URL.",
+    "OLLAMA_NO_MODELS": "Connected to Ollama server but no models were found.",
+    "STABLE_DIFFUSION_URL_MISSING": "Image generation is enabled but no Stable Diffusion URL is set.",
+    "STABLE_DIFFUSION_CONNECTION_FAILED": "Could not connect to Stable Diffusion server. Image generation may not work."
 }

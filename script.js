@@ -1,7 +1,10 @@
 class ChatGPTItemGenerator {
   constructor() {
-    this.apiKey = game.settings.get("chatgpt-item-generator", "openaiApiKey") || "";
-    this.dalleApiKey = game.settings.get("chatgpt-item-generator", "dalleApiKey") || "";
+    this.apiUrl = game.settings.get("chatgpt-item-generator", "ollamaApiUrl") || "http://localhost:11434";
+    this.stableDiffusionUrl = game.settings.get("chatgpt-item-generator", "stableDiffusionUrl") || "";
+    this.enableImageGeneration = game.settings.get("chatgpt-item-generator", "enableImageGeneration") || false;
+    this.selectedModel = game.settings.get("chatgpt-item-generator", "selectedModel") || "llama3";
+    this.availableModels = [];
     // List of keywords for forced name inclusion (used in auto-generation only)
     this.keywords = ["ring", "amulet", "dagger", "sword", "shield", "gloves", "cloak", "potion"];
     // Save images under data/chatgpt-item-generator
@@ -9,23 +12,83 @@ class ChatGPTItemGenerator {
   }
 
   static registerSettings() {
-    game.settings.register("chatgpt-item-generator", "openaiApiKey", {
-      name: "OpenAI API Key",
-      hint: "Enter your OpenAI API key to enable AI-generated item descriptions.",
+    game.settings.register("chatgpt-item-generator", "ollamaApiUrl", {
+      name: "Ollama API URL",
+      hint: "Enter your Ollama API URL (default: http://localhost:11434)",
+      scope: "world",
+      config: true,
+      type: String,
+      default: "http://localhost:11434",
+      onChange: value => window.location.reload()
+    });
+    game.settings.register("chatgpt-item-generator", "stableDiffusionUrl", {
+      name: "Stable Diffusion API URL",
+      hint: "Enter your Stable Diffusion API URL for image generation. Leave empty to disable image generation.",
       scope: "world",
       config: true,
       type: String,
       default: "",
       onChange: value => window.location.reload()
     });
-    game.settings.register("chatgpt-item-generator", "dalleApiKey", {
-      name: "DALL·E API Key",
-      hint: "Enter your OpenAI API key for DALL·E to enable AI-generated images.",
+    game.settings.register("chatgpt-item-generator", "enableImageGeneration", {
+      name: "Enable Image Generation",
+      hint: "Toggle to enable or disable AI image generation for items.",
+      scope: "world",
+      config: true,
+      type: Boolean,
+      default: false,
+      onChange: value => {
+        if (game.chatGPTItemGenerator) {
+          game.chatGPTItemGenerator.enableImageGeneration = value;
+        }
+        window.location.reload();
+      }
+    });
+    game.settings.register("chatgpt-item-generator", "selectedModel", {
+      name: "Ollama Model",
+      hint: "Select which Ollama model to use for item generation",
       scope: "world",
       config: true,
       type: String,
-      default: "",
-      onChange: value => window.location.reload()
+      default: "llama3",
+      choices: {
+        "llama3": "Llama 3",
+        "llama2": "Llama 2",
+        "mistral": "Mistral",
+        "wizard": "Wizard"
+      },
+      onChange: value => {
+        if (game.chatGPTItemGenerator) {
+          game.chatGPTItemGenerator.selectedModel = value;
+        }
+        window.location.reload();
+      }
+    });
+    
+    // Connection status display
+    game.settings.register("chatgpt-item-generator", "verifyOllamaConnection", {
+      name: "Connection Status",
+      hint: "Current status of Ollama connection",
+      scope: "world",
+      config: true,
+      type: String,
+      default: "Not Verified",
+      choices: {
+        "Not Verified": "Not Verified",
+        "Verified": "Verified",
+        "Failed": "Failed"
+      },
+      onChange: value => {}
+    });
+    
+    // Add a button to verify connection
+    game.settings.registerMenu("chatgpt-item-generator", "verifyConnection", {
+      name: "Verify Ollama Connection",
+      label: "Test Connection",
+      hint: "Click to verify connection to Ollama server and fetch available models",
+      icon: "fas fa-plug",
+      type: VerifyOllamaConnectionDialog,
+      restricted: true
     });
   }
 
@@ -65,71 +128,71 @@ class ChatGPTItemGenerator {
   }
 
   async fixInvalidJSON(badJSON) {
-    if (!this.apiKey) return badJSON;
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch(`${this.apiUrl}/api/generate`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${this.apiKey}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a helpful assistant. The user provided invalid JSON. Remove any disclaimers, partial lines, or text outside of the JSON object. If there is text before or after the JSON braces, remove it. Fix it so it's strictly valid JSON with double-quoted property names. No extra commentary."
-          },
-          { role: "user", content: badJSON }
-        ],
-        max_tokens: 900
+        model: this.selectedModel,
+        prompt: `Fix this invalid JSON: ${badJSON}. Remove any disclaimers, partial lines, or text outside of the JSON object. If there is text before or after the JSON braces, remove it. Fix it so it's strictly valid JSON with double-quoted property names. No extra commentary.`,
+        stream: false
       })
     });
     let data = await response.json();
-    return data.choices?.[0]?.message?.content?.trim() || badJSON;
+    return data.response?.trim() || badJSON;
   }
 
   /* --------------------------------
-   * 2) Image Generation with Base64 & Local Saving (with DALL‑E 2 fallback)
+   * 2) Image Generation with Base64 & Local Saving (with Stable Diffusion)
    * ------------------------------- */
   async generateItemImageSilent(prompt) {
-    if (!this.dalleApiKey) return "";
-    // Try DALL‑E 3 first.
-    let response = await fetch("https://api.openai.com/v1/images/generations", {
+    // Check if image generation is enabled in settings
+    if (!this.enableImageGeneration) {
+      console.log("Image generation is disabled in settings");
+      return "";
+    }
+    
+    // Check if Stable Diffusion URL is set
+    if (!this.stableDiffusionUrl) {
+      console.log("Stable Diffusion URL is not set");
+      ui.notifications.warn("Image generation is enabled but Stable Diffusion URL is not set.");
+      return "";
+    }
+    
+    // Stable Diffusion Automatic1111 API call
+    let response = await fetch(this.stableDiffusionUrl, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${this.dalleApiKey}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "dall-e-3",
-        prompt: `Generate an image for a DnD 5e item with these details: ${prompt}. Do not include any text in the image.`,
-        n: 1,
-        size: "1024x1024",
-        response_format: "b64_json"
+        "prompt": `fantasy D&D item, ${prompt}, highly detailed, digital painting, artstation, concept art, smooth, sharp focus, illustration`,
+        "negative_prompt": "text, watermark, signature, low quality, blurry",
+        "steps": 20,
+        "width": 512,
+        "height": 512
       })
+    }).catch(error => {
+      console.error("Error connecting to Stable Diffusion server:", error);
+      ui.notifications.error("Failed to connect to Stable Diffusion server for image generation.");
+      return { ok: false };
     });
-    let data = await response.json();
-    // If DALL‑E 3 fails, try DALL‑E 2.
-    if (data.error || !data.data || !data.data[0]?.b64_json) {
-      console.warn("DALL‑E 3 call failed, falling back to DALL‑E 2", data.error);
-      response = await fetch("https://api.openai.com/v1/images/generations", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${this.dalleApiKey}`
-        },
-        body: JSON.stringify({
-          model: "dall-e-2",
-          prompt: `Generate an image for a DnD 5e item with these details: ${prompt}. Do not include any text in the image.`,
-          n: 1,
-          size: "1024x1024",
-          response_format: "b64_json"
-        })
-      });
-      data = await response.json();
+    
+    if (!response.ok) {
+      return "";
     }
-    if (data.data && data.data[0]?.b64_json) {
+    
+    let data = await response.json();
+    if (data.images && data.images[0]) {
+      const dataUrl = `data:image/png;base64,${data.images[0]}`;
+      const fileName = `${prompt.replace(/\s+/g, "_").toLowerCase()}_${Date.now()}.png`;
+      const targetFolder = this.imageFolder;
+      await this.createFolder(targetFolder);
+      await this.checkFolder(targetFolder);
+      const localPath = await this.saveImageLocally(dataUrl, fileName, targetFolder);
+      return localPath;
+    } else if (data.data && data.data[0]?.b64_json) {
       const dataUrl = `data:image/png;base64,${data.data[0].b64_json}`;
       const fileName = `${prompt.replace(/\s+/g, "_").toLowerCase()}_${Date.now()}.png`;
       const targetFolder = this.imageFolder;
@@ -185,6 +248,8 @@ class ChatGPTItemGenerator {
     if (damage.parts && Array.isArray(damage.parts)) {
       return damage;
     }
+    
+    // Handle dnd5e system damage structure
     if (damage.dice) {
       let formula = damage.dice;
       if (damage.modifier) {
@@ -195,7 +260,22 @@ class ChatGPTItemGenerator {
         formula += mod;
       }
       let damageType = damage.type || "";
-      return { parts: [[formula, damageType]] };
+      
+      // Create a damage object that aligns with dnd5e system's DamageData structure
+      // This ensures compatibility with the system's damage calculations
+      let diceMatch = damage.dice.match(/(\d+)d(\d+)/);
+      let base = {
+        number: diceMatch ? parseInt(diceMatch[1]) : 0,
+        denomination: diceMatch ? parseInt(diceMatch[2]) : 0,
+        bonus: damage.modifier || "",
+        types: new Set([damageType])
+      };
+      
+      return { 
+        parts: [[formula, damageType]],
+        base: base,
+        versatile: {}
+      };
     }
     return { parts: [] };
   }
@@ -203,16 +283,71 @@ class ChatGPTItemGenerator {
   transformWeaponProperties(wp) {
     let properties = [];
     if (!wp) return properties;
+    
+    // Map of common property names to dnd5e system property keys
+    const propertyMap = {
+      "versatile": "ver",
+      "finesse": "fin",
+      "heavy": "hvy",
+      "light": "lgt",
+      "loading": "lod",
+      "reach": "rch",
+      "thrown": "thr",
+      "two-handed": "two",
+      "ammunition": "amm",
+      "special": "spc",
+      "silvered": "sil",
+      "adamantine": "ada",
+      "magical": "mgc",
+      "melee": "mel",
+      "ranged": "rng"
+    };
+    
     if (Array.isArray(wp)) {
-      properties = wp.map(prop => prop.toString().toLowerCase());
+      for (let prop of wp) {
+        const propLower = prop.toString().toLowerCase();
+        // Check if the property exists in our map
+        for (let [key, value] of Object.entries(propertyMap)) {
+          if (propLower.includes(key)) {
+            properties.push(value);
+            break;
+          }
+        }
+        // If no match found, add the original property
+        if (!Object.keys(propertyMap).some(key => propLower.includes(key))) {
+          properties.push(propLower);
+        }
+      }
     } else if (typeof wp === 'object') {
       for (let key in wp) {
         if (wp.hasOwnProperty(key)) {
-          properties.push(`${key}: ${wp[key]}`.toLowerCase());
+          const keyLower = key.toLowerCase();
+          // Check if the key exists in our map
+          for (let [mapKey, value] of Object.entries(propertyMap)) {
+            if (keyLower.includes(mapKey)) {
+              properties.push(value);
+              break;
+            }
+          }
+          // If no match found, add the original property
+          if (!Object.keys(propertyMap).some(mapKey => keyLower.includes(mapKey))) {
+            properties.push(`${key}: ${wp[key]}`.toLowerCase());
+          }
         }
       }
     } else {
-      properties.push(wp.toString().toLowerCase());
+      const propLower = wp.toString().toLowerCase();
+      // Check if the property exists in our map
+      for (let [key, value] of Object.entries(propertyMap)) {
+        if (propLower.includes(key)) {
+          properties.push(value);
+          break;
+        }
+      }
+      // If no match found, add the original property
+      if (!Object.keys(propertyMap).some(key => propLower.includes(key))) {
+        properties.push(propLower);
+      }
     }
     return properties;
   }
@@ -221,35 +356,20 @@ class ChatGPTItemGenerator {
    * 3) Item Generation Functions
    * ------------------------------- */
   async generateItemJSON(prompt, explicitType = "") {
-    if (!this.apiKey) return "{}";
     const typeNote = explicitType ? ` The item type is ${explicitType}.` : "";
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch(`${this.apiUrl}/api/generate`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${this.apiKey}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a Foundry VTT assistant creating structured JSON for a single, consistent DnD 5e item." +
-              typeNote +
-              " Do not include an explicit item name field; instead, output the item description beginning with '<b>Item Name:</b> ' followed by the item name and a '<br>' tag, then the detailed lore. " +
-              "The JSON must include a non-empty 'description' field (which starts with this marker) along with the fields 'rarity', 'weight', 'price', and 'requiresAttunement'. " +
-              "If it's a weapon, include 'weaponProperties', a 'damage' field with the damage dice (e.g., '1d8', '2d6') and any bonus modifiers, and also include a nested 'type' object with keys 'value' (e.g. 'simpleM', 'martialM') and 'baseItem' (e.g., 'longsword'). " +
-              "Decide if 'magical' is true or false. " +
-              "Output valid JSON with double-quoted property names and no extra text."
-          },
-          { role: "user", content: prompt }
-        ],
-        max_tokens: 700
+        model: this.selectedModel,
+        prompt: `You are a Foundry VTT assistant creating structured JSON for a single, consistent DnD 5e item.${typeNote} Do not include an explicit item name field; instead, output the item description beginning with '<b>Item Name:</b> ' followed by the item name and a '<br>' tag, then the detailed lore. The JSON must include a non-empty 'description' field (which starts with this marker) along with the fields 'rarity', 'weight', 'price', and 'requiresAttunement'. If it's a weapon, include 'weaponProperties', a 'damage' field with the damage dice (e.g., '1d8', '2d6') and any bonus modifiers, and also include a nested 'type' object with keys 'value' (e.g. 'simpleM', 'martialM') and 'baseItem' (e.g., 'longsword'). Decide if 'magical' is true or false. Output valid JSON with double-quoted property names and no extra text. User request: ${prompt}`,
+        stream: false
       })
     });
     let data = await response.json();
-    return data.choices?.[0]?.message?.content?.trim() || "{}";
+    return data.response?.trim() || "{}";
   }
 
   async parseItemJSON(raw) {
@@ -275,28 +395,19 @@ class ChatGPTItemGenerator {
   }
 
   async generateItemName(prompt) {
-    if (!this.apiKey) return "Unnamed";
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch(`${this.apiUrl}/api/generate`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${this.apiKey}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are an expert in fantasy RPGs. Generate a short item name in plain text. Do not include the word 'dragon' unless explicitly requested. No JSON."
-          },
-          { role: "user", content: prompt }
-        ],
-        max_tokens: 20
+        model: this.selectedModel,
+        prompt: `You are an expert in fantasy RPGs. Generate a short item name in plain text. Do not include the word 'dragon' unless explicitly requested. No JSON. User request: ${prompt}`,
+        stream: false
       })
     });
     let data = await response.json();
-    let name = data.choices?.[0]?.message?.content?.trim() || "Unnamed";
+    let name = data.response?.trim() || "Unnamed";
     return this.forceKeywordInName(name, prompt, "");
   }
 
@@ -329,23 +440,19 @@ class ChatGPTItemGenerator {
     const prompt = `The current item name is: "${currentName}".
 The item description is: "${description}".
 Please provide a refined, improved item name that better reflects the details and flavor of the description. Output only the name in plain text.`;
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch(`${this.apiUrl}/api/generate`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${this.apiKey}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4",
-        messages: [
-          { role: "system", content: "You are an expert in fantasy item naming." },
-          { role: "user", content: prompt }
-        ],
-        max_tokens: 20
+        model: this.selectedModel,
+        prompt: `You are an expert in fantasy item naming. ${prompt}`,
+        stream: false
       })
     });
     let data = await response.json();
-    return data.choices?.[0]?.message?.content?.trim() || currentName;
+    return data.response?.trim() || currentName;
   }
 
   /* --------------------------------
@@ -390,32 +497,27 @@ Please provide a refined, improved item name that better reflects the details an
   }
 
   async gptFixMismatch(expectedName, foundType, itemName, rawJSON) {
-    if (!this.apiKey) return rawJSON;
-    let systemMessage =
+    let prompt =
       "You are a Foundry VTT assistant. The item name or prompt indicates it is a " +
       expectedName +
       ", but the JSON indicates it is a " +
       foundType +
       ". Fix the JSON so that the item is consistent as a " +
       expectedName +
-      ". Output only valid JSON.";
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      ". Output only valid JSON. JSON to fix: " + rawJSON;
+    const response = await fetch(`${this.apiUrl}/api/generate`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${this.apiKey}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4",
-        messages: [
-          { role: "system", content: systemMessage },
-          { role: "user", content: rawJSON }
-        ],
-        max_tokens: 900
+        model: this.selectedModel,
+        prompt: prompt,
+        stream: false
       })
     });
     let data = await response.json();
-    let newJSON = data.choices?.[0]?.message?.content?.trim() || rawJSON;
+    let newJSON = data.response?.trim() || rawJSON;
     return newJSON;
   }
 
@@ -435,23 +537,148 @@ Description: ${itemData.system.description.value}
 
 Output only the descriptions, one per line, with no numbering or extra commentary.`;
     
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch(`${this.apiUrl}/api/generate`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${this.apiKey}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4",
-        messages: [
-          { role: "system", content: "You are an expert DnD magical property generator." },
-          { role: "user", content: prompt }
-        ],
-        max_tokens: 300
+        model: this.selectedModel,
+        prompt: `You are an expert DnD magical property generator. ${prompt}`,
+        stream: false
       })
     });
     let data = await response.json();
-    return data.choices?.[0]?.message?.content?.trim() || "";
+    return data.response?.trim() || "";
+  }
+  
+  /* --------------------------------
+   * New Helper: Generate Active Effects for Magical Properties
+   * ------------------------------- */
+  async generateActiveEffects(itemData, magicalProperties) {
+    if (!magicalProperties) return [];
+    
+    // Split properties into individual lines
+    const properties = magicalProperties.split('\n').filter(p => p.trim().length > 0);
+    if (properties.length === 0) return [];
+    
+    const activeEffects = [];
+    
+    // Common stat bonuses to look for in magical properties
+    const statBonusPatterns = [
+      { regex: /\+([1-3])\s+to\s+(strength|str)/i, ability: "str" },
+      { regex: /\+([1-3])\s+to\s+(dexterity|dex)/i, ability: "dex" },
+      { regex: /\+([1-3])\s+to\s+(constitution|con)/i, ability: "con" },
+      { regex: /\+([1-3])\s+to\s+(intelligence|int)/i, ability: "int" },
+      { regex: /\+([1-3])\s+to\s+(wisdom|wis)/i, ability: "wis" },
+      { regex: /\+([1-3])\s+to\s+(charisma|cha)/i, ability: "cha" },
+      { regex: /\+([1-3])\s+to\s+armor\s+class/i, ability: "ac" },
+      { regex: /\+([1-3])\s+to\s+(hit|attack)/i, ability: "attack" },
+      { regex: /\+([1-3])\s+to\s+(damage|weapon damage)/i, ability: "damage" },
+      { regex: /\+([1-3])\s+to\s+(saving throws|saves)/i, ability: "saves" }
+    ];
+    
+    // Process each magical property
+    for (let i = 0; i < properties.length; i++) {
+      const property = properties[i];
+      let effectCreated = false;
+      
+      // Check for stat bonuses
+      for (const pattern of statBonusPatterns) {
+        const match = property.match(pattern.regex);
+        if (match) {
+          const bonus = parseInt(match[1]);
+          let effect = {
+            label: property,
+            icon: "icons/svg/aura.svg",
+            origin: itemData._id,
+            duration: {
+              seconds: null
+            },
+            disabled: false
+          };
+          
+          // Configure the changes based on the ability
+          switch (pattern.ability) {
+            case "str":
+            case "dex":
+            case "con":
+            case "int":
+            case "wis":
+            case "cha":
+              effect.changes = [{
+                key: `system.abilities.${pattern.ability}.value`,
+                mode: 2, // OVERRIDE for simplicity
+                value: `@abilities.${pattern.ability}.value + ${bonus}`,
+                priority: 20
+              }];
+              break;
+            case "ac":
+              effect.changes = [{
+                key: "system.attributes.ac.bonus",
+                mode: 2,
+                value: bonus,
+                priority: 20
+              }];
+              break;
+            case "attack":
+              effect.changes = [{
+                key: "system.bonuses.mwak.attack",
+                mode: 2,
+                value: bonus,
+                priority: 20
+              }, {
+                key: "system.bonuses.rwak.attack",
+                mode: 2,
+                value: bonus,
+                priority: 20
+              }];
+              break;
+            case "damage":
+              effect.changes = [{
+                key: "system.bonuses.mwak.damage",
+                mode: 2,
+                value: bonus,
+                priority: 20
+              }, {
+                key: "system.bonuses.rwak.damage",
+                mode: 2,
+                value: bonus,
+                priority: 20
+              }];
+              break;
+            case "saves":
+              effect.changes = [{
+                key: "system.bonuses.abilities.save",
+                mode: 2,
+                value: bonus,
+                priority: 20
+              }];
+              break;
+          }
+          
+          activeEffects.push(effect);
+          effectCreated = true;
+          break;
+        }
+      }
+      
+      // If no specific effect was created, add a generic "description only" effect
+      if (!effectCreated) {
+        activeEffects.push({
+          label: property,
+          icon: "icons/svg/aura.svg",
+          origin: itemData._id,
+          duration: {
+            seconds: null
+          },
+          disabled: false,
+          changes: [] // No mechanical changes, just the description
+        });
+      }
+    }
+    
+    return activeEffects;
   }
 
   /* --------------------------------
@@ -526,7 +753,110 @@ Output only the descriptions, one per line, with no numbering or extra commentar
       newItemType = parsed.type;
     } else {
       if (foundryItemType === "weapon") {
-        newItemType = { value: "simpleM", baseItem: "" };
+        // Map weapon types to dnd5e system weapon types
+        let weaponTypeValue = "simpleM"; // Default to simple melee
+        let baseItem = "";
+        
+        // Determine weapon type based on name and description
+        const nameLC = refinedName.toLowerCase();
+        const descLC = finalDesc.toLowerCase();
+        
+        // Check for martial weapons
+        const martialWeapons = ["longsword", "greatsword", "rapier", "warhammer", "battleaxe", "glaive", "halberd", "pike", "lance"];
+        if (martialWeapons.some(w => nameLC.includes(w) || descLC.includes(w))) {
+          weaponTypeValue = "martialM";
+        }
+        
+        // Check for ranged weapons
+        const rangedWeapons = ["bow", "crossbow", "sling", "dart", "javelin"];
+        if (rangedWeapons.some(w => nameLC.includes(w) || descLC.includes(w))) {
+          weaponTypeValue = nameLC.includes("long") || descLC.includes("long") ? "martialR" : "simpleR";
+        }
+        
+        // Determine base item if possible
+        const baseItemMap = {
+          "longsword": "longsword",
+          "shortsword": "shortsword",
+          "greatsword": "greatsword",
+          "dagger": "dagger",
+          "rapier": "rapier",
+          "scimitar": "scimitar",
+          "handaxe": "handaxe",
+          "battleaxe": "battleaxe",
+          "greataxe": "greataxe",
+          "warhammer": "warhammer",
+          "maul": "maul",
+          "club": "club",
+          "mace": "mace",
+          "quarterstaff": "quarterstaff",
+          "spear": "spear",
+          "javelin": "javelin",
+          "longbow": "longbow",
+          "shortbow": "shortbow",
+          "light crossbow": "lightcrossbow",
+          "heavy crossbow": "heavycrossbow",
+          "sling": "sling"
+        };
+        
+        for (const [key, value] of Object.entries(baseItemMap)) {
+          if (nameLC.includes(key) || descLC.includes(key)) {
+            baseItem = value;
+            break;
+          }
+        }
+        
+        newItemType = { value: weaponTypeValue, baseItem: baseItem };
+      } else if (foundryItemType === "equipment") {
+        // Map equipment types to dnd5e system equipment types
+        let equipmentTypeValue = "trinket"; // Default
+        
+        // Determine equipment type based on name and description
+        const nameLC = refinedName.toLowerCase();
+        const descLC = finalDesc.toLowerCase();
+        
+        if (nameLC.includes("armor") || descLC.includes("armor")) {
+          if (nameLC.includes("light") || descLC.includes("light armor")) {
+            equipmentTypeValue = "light";
+          } else if (nameLC.includes("medium") || descLC.includes("medium armor")) {
+            equipmentTypeValue = "medium";
+          } else if (nameLC.includes("heavy") || descLC.includes("heavy armor")) {
+            equipmentTypeValue = "heavy";
+          } else {
+            equipmentTypeValue = "medium"; // Default armor type
+          }
+        } else if (nameLC.includes("shield") || descLC.includes("shield")) {
+          equipmentTypeValue = "shield";
+        } else if (nameLC.includes("cloak") || nameLC.includes("cape") || descLC.includes("cloak") || descLC.includes("cape")) {
+          equipmentTypeValue = "clothing";
+        } else if (nameLC.includes("ring") || descLC.includes("ring")) {
+          equipmentTypeValue = "trinket";
+        } else if (nameLC.includes("amulet") || nameLC.includes("necklace") || descLC.includes("amulet") || descLC.includes("necklace")) {
+          equipmentTypeValue = "trinket";
+        }
+        
+        newItemType = { value: equipmentTypeValue };
+      } else if (foundryItemType === "consumable") {
+        // Map consumable types to dnd5e system consumable types
+        let consumableTypeValue = "potion"; // Default
+        
+        // Determine consumable type based on name and description
+        const nameLC = refinedName.toLowerCase();
+        const descLC = finalDesc.toLowerCase();
+        
+        if (nameLC.includes("scroll") || descLC.includes("scroll")) {
+          consumableTypeValue = "scroll";
+        } else if (nameLC.includes("wand") || descLC.includes("wand")) {
+          consumableTypeValue = "wand";
+        } else if (nameLC.includes("rod") || descLC.includes("rod")) {
+          consumableTypeValue = "rod";
+        } else if (nameLC.includes("food") || descLC.includes("food") || nameLC.includes("ration") || descLC.includes("ration")) {
+          consumableTypeValue = "food";
+        } else if (nameLC.includes("ammunition") || nameLC.includes("arrow") || nameLC.includes("bolt") || 
+                  descLC.includes("ammunition") || descLC.includes("arrow") || descLC.includes("bolt")) {
+          consumableTypeValue = "ammo";
+        }
+        
+        newItemType = { value: consumableTypeValue };
       } else {
         newItemType = foundryItemType;
       }
@@ -566,17 +896,49 @@ Output only the descriptions, one per line, with no numbering or extra commentar
       const count = Math.floor(Math.random() * 3) + 1;
       const magProps = await this.generateMagicalProperties(newItemData, count);
       if (magProps) {
-        newItemData.system.description.value += `<br><br><strong>Magical Properties:</strong><br>${magProps.replace(/\n/g, "<br>")}`;
+        // Add magical properties to the description
+        newItemData.system.description.value += `<br><br><strong>Magical Properties:</strong><br>${magProps.replace(/\n/g, "<br>")}`;        
+        
+        // Generate and add active effects for the magical properties
+        const activeEffects = await this.generateActiveEffects(newItemData, magProps);
+        if (activeEffects.length > 0) {
+          newItemData.effects = activeEffects;
+        }
       }
     }
     if (foundryItemType === "equipment" && parsed.itemType && (parsed.itemType.toLowerCase() === "armor" || parsed.itemType.toLowerCase() === "shield")) {
       let armorType = parsed.armorType || "medium";
       let acValue = parsed.ac || 14;
+      
+      // Set appropriate dex modifier cap based on armor type
+      let dexMod = null;
+      if (armorType === "light") {
+        dexMod = null; // Light armor has no dex cap
+      } else if (armorType === "medium") {
+        dexMod = 2; // Medium armor caps dex bonus at +2
+      } else if (armorType === "heavy") {
+        dexMod = 0; // Heavy armor allows no dex bonus
+      }
+      
+      // Set strength requirement for heavy armor
+      let strengthReq = 0;
+      if (armorType === "heavy") {
+        strengthReq = parsed.strength || 13; // Default strength requirement for heavy armor
+      }
+      
       newItemData.system.armor = {
         value: acValue,
         type: armorType,
-        dex: (armorType === "medium") ? 2 : null
+        dex: dexMod
       };
+      
+      // Add strength requirement if applicable
+      if (strengthReq > 0) {
+        newItemData.system.strength = strengthReq;
+      }
+      
+      // Set proficiency level to 1 (proficient) by default for armor
+      newItemData.system.proficient = 1;
     }
     await Item.create(newItemData);
     this.updateProgressBar(100);
@@ -588,31 +950,22 @@ Output only the descriptions, one per line, with no numbering or extra commentar
    * 6) Roll Table Generation Functions
    * ------------------------------- */
   async generateRollTableJSON(userPrompt) {
-    if (!this.apiKey) return "{}";
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch(`${this.apiUrl}/api/generate`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${this.apiKey}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a Foundry VTT assistant creating strictly valid JSON for a DnD 5e roll table. " +
+        model: "llama3",
+        prompt: "You are a Foundry VTT assistant creating strictly valid JSON for a DnD 5e roll table. " +
               "Output valid JSON with double-quoted property names and no extra commentary or text outside the JSON. " +
               "No disclaimers, no line breaks before or after the JSON object. " +
               "The JSON must include the following fields: 'name', 'formula', 'description', 'tableType', and 'entries'. " +
               "For tables of type 'items', each entry must be an object with 'text', 'minRange', 'maxRange', 'weight', and 'documentCollection' set to 'Item'. " +
               "For generic roll tables, include additional details from the prompt (e.g., city, biome, or theme details) to create tailored, descriptive entries. " +
               "Ensure that the output contains exactly 20 entries. " +
-              "Output only the JSON object with no extra commentary."
-          },
-          { role: "user", content: userPrompt }
-        ],
-        max_tokens: 900
+              "Output only the JSON object with no extra commentary. User request: " + userPrompt,
+        stream: false
       })
     });
     let data = await response.json();
@@ -716,7 +1069,110 @@ Output only the descriptions, one per line, with no numbering or extra commentar
       newItemType = parsed.type;
     } else {
       if (foundryItemType === "weapon") {
-        newItemType = { value: "simpleM", baseItem: "" };
+        // Map weapon types to dnd5e system weapon types
+        let weaponTypeValue = "simpleM"; // Default to simple melee
+        let baseItem = "";
+        
+        // Determine weapon type based on name and description
+        const nameLC = refinedName.toLowerCase();
+        const descLC = finalDesc.toLowerCase();
+        
+        // Check for martial weapons
+        const martialWeapons = ["longsword", "greatsword", "rapier", "warhammer", "battleaxe", "glaive", "halberd", "pike", "lance"];
+        if (martialWeapons.some(w => nameLC.includes(w) || descLC.includes(w))) {
+          weaponTypeValue = "martialM";
+        }
+        
+        // Check for ranged weapons
+        const rangedWeapons = ["bow", "crossbow", "sling", "dart", "javelin"];
+        if (rangedWeapons.some(w => nameLC.includes(w) || descLC.includes(w))) {
+          weaponTypeValue = nameLC.includes("long") || descLC.includes("long") ? "martialR" : "simpleR";
+        }
+        
+        // Determine base item if possible
+        const baseItemMap = {
+          "longsword": "longsword",
+          "shortsword": "shortsword",
+          "greatsword": "greatsword",
+          "dagger": "dagger",
+          "rapier": "rapier",
+          "scimitar": "scimitar",
+          "handaxe": "handaxe",
+          "battleaxe": "battleaxe",
+          "greataxe": "greataxe",
+          "warhammer": "warhammer",
+          "maul": "maul",
+          "club": "club",
+          "mace": "mace",
+          "quarterstaff": "quarterstaff",
+          "spear": "spear",
+          "javelin": "javelin",
+          "longbow": "longbow",
+          "shortbow": "shortbow",
+          "light crossbow": "lightcrossbow",
+          "heavy crossbow": "heavycrossbow",
+          "sling": "sling"
+        };
+        
+        for (const [key, value] of Object.entries(baseItemMap)) {
+          if (nameLC.includes(key) || descLC.includes(key)) {
+            baseItem = value;
+            break;
+          }
+        }
+        
+        newItemType = { value: weaponTypeValue, baseItem: baseItem };
+      } else if (foundryItemType === "equipment") {
+        // Map equipment types to dnd5e system equipment types
+        let equipmentTypeValue = "trinket"; // Default
+        
+        // Determine equipment type based on name and description
+        const nameLC = refinedName.toLowerCase();
+        const descLC = finalDesc.toLowerCase();
+        
+        if (nameLC.includes("armor") || descLC.includes("armor")) {
+          if (nameLC.includes("light") || descLC.includes("light armor")) {
+            equipmentTypeValue = "light";
+          } else if (nameLC.includes("medium") || descLC.includes("medium armor")) {
+            equipmentTypeValue = "medium";
+          } else if (nameLC.includes("heavy") || descLC.includes("heavy armor")) {
+            equipmentTypeValue = "heavy";
+          } else {
+            equipmentTypeValue = "medium"; // Default armor type
+          }
+        } else if (nameLC.includes("shield") || descLC.includes("shield")) {
+          equipmentTypeValue = "shield";
+        } else if (nameLC.includes("cloak") || nameLC.includes("cape") || descLC.includes("cloak") || descLC.includes("cape")) {
+          equipmentTypeValue = "clothing";
+        } else if (nameLC.includes("ring") || descLC.includes("ring")) {
+          equipmentTypeValue = "trinket";
+        } else if (nameLC.includes("amulet") || nameLC.includes("necklace") || descLC.includes("amulet") || descLC.includes("necklace")) {
+          equipmentTypeValue = "trinket";
+        }
+        
+        newItemType = { value: equipmentTypeValue };
+      } else if (foundryItemType === "consumable") {
+        // Map consumable types to dnd5e system consumable types
+        let consumableTypeValue = "potion"; // Default
+        
+        // Determine consumable type based on name and description
+        const nameLC = refinedName.toLowerCase();
+        const descLC = finalDesc.toLowerCase();
+        
+        if (nameLC.includes("scroll") || descLC.includes("scroll")) {
+          consumableTypeValue = "scroll";
+        } else if (nameLC.includes("wand") || descLC.includes("wand")) {
+          consumableTypeValue = "wand";
+        } else if (nameLC.includes("rod") || descLC.includes("rod")) {
+          consumableTypeValue = "rod";
+        } else if (nameLC.includes("food") || descLC.includes("food") || nameLC.includes("ration") || descLC.includes("ration")) {
+          consumableTypeValue = "food";
+        } else if (nameLC.includes("ammunition") || nameLC.includes("arrow") || nameLC.includes("bolt") || 
+                  descLC.includes("ammunition") || descLC.includes("arrow") || descLC.includes("bolt")) {
+          consumableTypeValue = "ammo";
+        }
+        
+        newItemType = { value: consumableTypeValue };
       } else {
         newItemType = foundryItemType;
       }
@@ -756,17 +1212,49 @@ Output only the descriptions, one per line, with no numbering or extra commentar
       const count = Math.floor(Math.random() * 3) + 1;
       const magProps = await this.generateMagicalProperties(newItemData, count);
       if (magProps) {
-        newItemData.system.description.value += `<br><br><strong>Magical Properties:</strong><br>${magProps.replace(/\n/g, "<br>")}`;
+        // Add magical properties to the description
+        newItemData.system.description.value += `<br><br><strong>Magical Properties:</strong><br>${magProps.replace(/\n/g, "<br>")}`;        
+        
+        // Generate and add active effects for the magical properties
+        const activeEffects = await this.generateActiveEffects(newItemData, magProps);
+        if (activeEffects.length > 0) {
+          newItemData.effects = activeEffects;
+        }
       }
     }
     if (foundryItemType === "equipment" && parsed.itemType && (parsed.itemType.toLowerCase() === "armor" || parsed.itemType.toLowerCase() === "shield")) {
       let armorType = parsed.armorType || "medium";
       let acValue = parsed.ac || 14;
+      
+      // Set appropriate dex modifier cap based on armor type
+      let dexMod = null;
+      if (armorType === "light") {
+        dexMod = null; // Light armor has no dex cap
+      } else if (armorType === "medium") {
+        dexMod = 2; // Medium armor caps dex bonus at +2
+      } else if (armorType === "heavy") {
+        dexMod = 0; // Heavy armor allows no dex bonus
+      }
+      
+      // Set strength requirement for heavy armor
+      let strengthReq = 0;
+      if (armorType === "heavy") {
+        strengthReq = parsed.strength || 13; // Default strength requirement for heavy armor
+      }
+      
       newItemData.system.armor = {
         value: acValue,
         type: armorType,
-        dex: (armorType === "medium") ? 2 : null
+        dex: dexMod
       };
+      
+      // Add strength requirement if applicable
+      if (strengthReq > 0) {
+        newItemData.system.strength = strengthReq;
+      }
+      
+      // Set proficiency level to 1 (proficient) by default for armor
+      newItemData.system.proficient = 1;
     }
     await Item.create(newItemData);
     this.updateProgressBar(100);
@@ -931,6 +1419,155 @@ Output only the descriptions, one per line, with no numbering or extra commentar
   async createFoundryAIObject() {
     await this.openGenerateDialog();
   }
+
+  /* --------------------------------
+   * Ollama Connection and Model Management
+   * ------------------------------- */
+  async verifyOllamaConnection() {
+    try {
+      ui.notifications.info("Testing connection to Ollama server...");
+      
+      // First check if the server is reachable
+      const pingResponse = await fetch(`${this.apiUrl}/api/version`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      }).catch(error => {
+        console.error("Error connecting to Ollama server:", error);
+        return { ok: false, error };
+      });
+      
+      if (!pingResponse.ok) {
+        game.settings.set("chatgpt-item-generator", "verifyOllamaConnection", "Failed");
+        ui.notifications.error("Failed to connect to Ollama server. Check your API URL.");
+        return false;
+      }
+      
+      // Now fetch available models
+      const modelResponse = await fetch(`${this.apiUrl}/api/tags`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+      
+      if (modelResponse.ok) {
+        const data = await modelResponse.json();
+        if (data && data.models) {
+          // Store available models
+          this.availableModels = data.models.map(model => ({
+            id: model.name,
+            name: model.name
+          }));
+          
+          // Update the settings with available models
+          const modelChoices = {};
+          this.availableModels.forEach(model => {
+            modelChoices[model.id] = model.name;
+          });
+          
+          // If no models found, keep default choices
+          if (Object.keys(modelChoices).length > 0) {
+            // Update the setting choices
+            const setting = game.settings.settings.get("chatgpt-item-generator.selectedModel");
+            if (setting) {
+              setting.choices = modelChoices;
+            }
+            
+            // If current selected model is not in the list, select the first available
+            if (!modelChoices[this.selectedModel] && Object.keys(modelChoices).length > 0) {
+              this.selectedModel = Object.keys(modelChoices)[0];
+              game.settings.set("chatgpt-item-generator", "selectedModel", this.selectedModel);
+            }
+          }
+          
+          game.settings.set("chatgpt-item-generator", "verifyOllamaConnection", "Verified");
+          ui.notifications.info(`Successfully connected to Ollama server. Found ${this.availableModels.length} models.`);
+          return true;
+        } else {
+          game.settings.set("chatgpt-item-generator", "verifyOllamaConnection", "Failed");
+          ui.notifications.error("Connected to Ollama server but no models were found.");
+          return false;
+        }
+      } else {
+        game.settings.set("chatgpt-item-generator", "verifyOllamaConnection", "Failed");
+        ui.notifications.error("Failed to fetch models from Ollama server.");
+        return false;
+      }
+    } catch (error) {
+      console.error("Error verifying Ollama connection:", error);
+      game.settings.set("chatgpt-item-generator", "verifyOllamaConnection", "Failed");
+      ui.notifications.error(`Failed to connect to Ollama server: ${error.message}`);
+      return false;
+    }
+  }
+  
+  /* --------------------------------
+   * Check if image generation is possible
+   * ------------------------------- */
+  async checkImageGenerationCapability() {
+    if (!this.enableImageGeneration) {
+      return false;
+    }
+    
+    if (!this.stableDiffusionUrl) {
+      ui.notifications.warn("Image generation is enabled but no Stable Diffusion URL is set.");
+      return false;
+    }
+    
+    try {
+      // Simple ping to check if the Stable Diffusion server is reachable
+      const response = await fetch(this.stableDiffusionUrl, {
+        method: "HEAD"
+      }).catch(error => {
+        console.error("Error connecting to Stable Diffusion server:", error);
+        return { ok: false, error };
+      });
+      
+      if (!response.ok) {
+        ui.notifications.warn("Could not connect to Stable Diffusion server. Image generation may not work.");
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error("Error checking Stable Diffusion connection:", error);
+      ui.notifications.warn("Error checking Stable Diffusion connection. Image generation may not work.");
+      return false;
+    }
+  }
+}
+
+// Dialog class for verifying Ollama connection
+class VerifyOllamaConnectionDialog extends FormApplication {
+  static get defaultOptions() {
+    return mergeObject(super.defaultOptions, {
+      id: "verify-ollama-connection",
+      title: "Verify Ollama Connection",
+      template: "templates/apps/form-application.html",
+      width: 400,
+      submitOnChange: false,
+      closeOnSubmit: true
+    });
+  }
+  
+  getData() {
+    return {
+      content: `<p>Click the button below to verify your connection to Ollama and fetch available models.</p>
+               <p>Current status: <strong>${game.settings.get("chatgpt-item-generator", "verifyOllamaConnection")}</strong></p>
+               <p>Current API URL: <strong>${game.chatGPTItemGenerator?.apiUrl || "Not set"}</strong></p>
+               <p>Current model: <strong>${game.chatGPTItemGenerator?.selectedModel || "Not set"}</strong></p>
+               <p>Image generation: <strong>${game.chatGPTItemGenerator?.enableImageGeneration ? "Enabled" : "Disabled"}</strong></p>`
+    };
+  }
+  
+  async _updateObject(event, formData) {
+    await game.chatGPTItemGenerator.verifyOllamaConnection();
+    if (game.chatGPTItemGenerator.enableImageGeneration) {
+      await game.chatGPTItemGenerator.checkImageGenerationCapability();
+    }
+  }
 }
 
 // Initialize settings and module
@@ -938,9 +1575,17 @@ Hooks.once("init", () => {
   ChatGPTItemGenerator.registerSettings();
 });
 
-Hooks.once("ready", () => {
+Hooks.once("ready", async () => {
   game.chatGPTItemGenerator = new ChatGPTItemGenerator();
   console.log("ChatGPT Item Generator Loaded");
+  
+  // Verify Ollama connection on startup
+  await game.chatGPTItemGenerator.verifyOllamaConnection();
+  
+  // Check image generation capability if enabled
+  if (game.chatGPTItemGenerator.enableImageGeneration) {
+    await game.chatGPTItemGenerator.checkImageGenerationCapability();
+  }
 });
 
 // Add the Generate button to the footer of the Items directory (only show to GMs)

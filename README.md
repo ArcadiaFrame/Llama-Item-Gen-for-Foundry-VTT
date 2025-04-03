@@ -55,7 +55,13 @@ This module leverages **Ollama** to dynamically create **D&D 5e items** within F
 
 ## Setup & Usage
 
-1. **Install from Foundry VTT Module Management**  
+1. **Install the Module**
+   - **Method 1:** Install directly from Foundry VTT's Module Management using the manifest URL:
+     ```
+     https://github.com/f3rr311/Llama-Item-Gen-for-Foundry-VTT/releases/latest/download/module.json
+     ```
+   - **Method 2:** Download the latest release from the [GitHub Releases page](https://github.com/f3rr311/Llama-Item-Gen-for-Foundry-VTT/releases) and install manually.
+
 2. **Enable** the module in your world via `Game Settings > Manage Modules`.
 3. **Configure** the module in `Game Settings > Configure Settings > Llama Item Generator`:
    - Set your Ollama API URL (default: http://localhost:11434)

@@ -1,18 +1,18 @@
 class ChatGPTItemGenerator {
   constructor() {
-    this.apiUrl = game.settings.get("chatgpt-item-generator", "ollamaApiUrl") || "http://localhost:11434";
-    this.stableDiffusionUrl = game.settings.get("chatgpt-item-generator", "stableDiffusionUrl") || "";
-    this.enableImageGeneration = game.settings.get("chatgpt-item-generator", "enableImageGeneration") || false;
-    this.selectedModel = game.settings.get("chatgpt-item-generator", "selectedModel") || "llama3";
+    this.apiUrl = game.settings.get("llama-item-gen-for-foundry-vtt", "ollamaApiUrl") || "http://localhost:11434";
+    this.stableDiffusionUrl = game.settings.get("llama-item-gen-for-foundry-vtt", "stableDiffusionUrl") || "";
+    this.enableImageGeneration = game.settings.get("llama-item-gen-for-foundry-vtt", "enableImageGeneration") || false;
+    this.selectedModel = game.settings.get("llama-item-gen-for-foundry-vtt", "selectedModel") || "llama3";
     this.availableModels = [];
     // List of keywords for forced name inclusion (used in auto-generation only)
     this.keywords = ["ring", "amulet", "dagger", "sword", "shield", "gloves", "cloak", "potion"];
     // Save images under data/chatgpt-item-generator
-    this.imageFolder = "chatgpt-item-generator";
+    this.imageFolder = "llama-item-gen-for-foundry-vtt";
   }
 
   static registerSettings() {
-    game.settings.register("chatgpt-item-generator", "ollamaApiUrl", {
+    game.settings.register("llama-item-gen-for-foundry-vtt", "ollamaApiUrl", {
       name: "Ollama API URL",
       hint: "Enter your Ollama API URL (default: http://localhost:11434)",
       scope: "world",
@@ -21,7 +21,7 @@ class ChatGPTItemGenerator {
       default: "http://localhost:11434",
       onChange: value => window.location.reload()
     });
-    game.settings.register("chatgpt-item-generator", "stableDiffusionUrl", {
+    game.settings.register("llama-item-gen-for-foundry-vtt", "stableDiffusionUrl", {
       name: "Stable Diffusion API URL",
       hint: "Enter your Stable Diffusion API URL for image generation. Leave empty to disable image generation.",
       scope: "world",
@@ -30,7 +30,7 @@ class ChatGPTItemGenerator {
       default: "",
       onChange: value => window.location.reload()
     });
-    game.settings.register("chatgpt-item-generator", "enableImageGeneration", {
+    game.settings.register("llama-item-gen-for-foundry-vtt", "enableImageGeneration", {
       name: "Enable Image Generation",
       hint: "Toggle to enable or disable AI image generation for items.",
       scope: "world",
@@ -44,7 +44,7 @@ class ChatGPTItemGenerator {
         window.location.reload();
       }
     });
-    game.settings.register("chatgpt-item-generator", "selectedModel", {
+    game.settings.register("llama-item-gen-for-foundry-vtt", "selectedModel", {
       name: "Ollama Model",
       hint: "Select which Ollama model to use for item generation",
       scope: "world",
@@ -66,7 +66,7 @@ class ChatGPTItemGenerator {
     });
     
     // Connection status display
-    game.settings.register("chatgpt-item-generator", "verifyOllamaConnection", {
+    game.settings.register("llama-item-gen-for-foundry-vtt", "verifyOllamaConnection", {
       name: "Connection Status",
       hint: "Current status of Ollama connection",
       scope: "world",
@@ -82,7 +82,7 @@ class ChatGPTItemGenerator {
     });
     
     // Add a button to verify connection
-    game.settings.registerMenu("chatgpt-item-generator", "verifyConnection", {
+    game.settings.registerMenu("llama-item-gen-for-foundry-vtt", "verifyConnection", {
       name: "Verify Ollama Connection",
       label: "Test Connection",
       hint: "Click to verify connection to Ollama server and fetch available models",
@@ -1470,7 +1470,7 @@ Output only the descriptions, one per line, with no numbering or extra commentar
           // If no models found, keep default choices
           if (Object.keys(modelChoices).length > 0) {
             // Update the setting choices
-            const setting = game.settings.settings.get("chatgpt-item-generator.selectedModel");
+            const setting = game.settings.settings.get("llama-item-gen-for-foundry-vtt.selectedModel");
             if (setting) {
               setting.choices = modelChoices;
             }

@@ -82,7 +82,7 @@ This module leverages **Ollama** to dynamically create **D&D 5e items** within F
   - **Ollama Connection Errors:** Ensure Ollama is running locally (or on your server) and the API URL is correctly configured. Use the "Test Connection" button in settings to verify.
   - **Model Availability:** Make sure the selected model (llama3, llama2, mistral, or wizard) is installed in your Ollama instance.
   - **Stable Diffusion Errors:** Verify that your Stable Diffusion API endpoint URL is correctly entered and the service is running if image generation is enabled.
-  - **Image Saving Failures:** Ensure the module folder (`data/chatgpt-item-generator/`) has the necessary write permissions.
+  - **Image Saving Failures:** Ensure the module folder (`data/llama-item-gen-for-foundry-vtt/`) has the necessary write permissions.
   - **JSON Formatting Problems:** If the output JSON is invalid, try re-running the prompt or selecting a different Ollama model.
 - **General FAQs:**  
   - **How do I install Ollama?** Visit [Ollama's official website](https://ollama.ai/) for installation instructions for your operating system.
@@ -111,7 +111,7 @@ This module leverages **Ollama** to dynamically create **D&D 5e items** within F
 
 ## Additional Notes
 - **Local Image Storage:**  
-  Images are saved in the module folder at `data/chatgpt-item-generator/`. Ensure you have the necessary file write permissions.
+  Images are saved in the module folder at `data/llama-item-gen-for-foundry-vtt/`. Ensure you have the necessary file write permissions.
 - **Roll Table Generation:**  
   The module requires GPT to generate exactly 20 entries for generic roll tables. If the table appears empty, try rerunning the prompt with more specific details.
 - **Damage Calculations:**  

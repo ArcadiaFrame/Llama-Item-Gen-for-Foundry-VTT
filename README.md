@@ -58,9 +58,9 @@ This module leverages **Ollama** to dynamically create **D&D 5e items** within F
 1. **Install the Module**
    - **Method 1:** Install directly from Foundry VTT's Module Management using the manifest URL:
      ```
-     https://github.com/f3rr311/Llama-Item-Gen-for-Foundry-VTT/releases/latest/download/module.json
+     https://github.com/ArcadiaFrame/Llama-Item-Gen-for-Foundry-VTT/releases/latest/download/module.json
      ```
-   - **Method 2:** Download the latest release from the [GitHub Releases page](https://github.com/f3rr311/Llama-Item-Gen-for-Foundry-VTT/releases) and install manually.
+   - **Method 2:** Download the latest release from the [GitHub Releases page](https://github.com/ArcadiaFrame/Llama-Item-Gen-for-Foundry-VTT/releases) and install manually.
 
 2. **Enable** the module in your world via `Game Settings > Manage Modules`.
 3. **Configure** the module in `Game Settings > Configure Settings > Llama Item Generator`:
@@ -88,7 +88,7 @@ This module leverages **Ollama** to dynamically create **D&D 5e items** within F
   - **Which model should I use?** Llama 3 is recommended for best results, but you can experiment with other models.
   - **Do I need Stable Diffusion?** No, image generation is optional. You can disable it in the module settings.
   
-  For more help, refer to the [GitHub Issues](https://github.com/f3rr311/Llama-Item-Gen-for-Foundry-VTT/issues) page for community-driven solutions and additional support.
+  For more help, refer to the [GitHub Issues](https://github.com/ArcadiaFrame/Llama-Item-Gen-for-Foundry-VTT/issues) page for community-driven solutions and additional support.
 
 ## Example Prompts
 - **Item Prompt:**  
@@ -118,7 +118,7 @@ This module leverages **Ollama** to dynamically create **D&D 5e items** within F
 
 
 ## Support
-For issues or feature requests, please visit [GitHub Issues](https://github.com/f3rr311/Llama-Item-Gen-for-Foundry-VTT/issues).
+For issues or feature requests, please visit [GitHub Issues](https://github.com/ArcadiaFrame/Llama-Item-Gen-for-Foundry-VTT/issues).
 
 ## License
 This project is licensed under the [MIT License](https://opensource.org/licenses/MIT).
